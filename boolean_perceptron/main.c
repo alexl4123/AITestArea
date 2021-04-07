@@ -11,24 +11,48 @@
  *  after that the perceptron is initialized,
  *  then the perceptron is trained 
  *  and finally the user can check if it works.
+ *
+ *  The activation function ist the sigmoid function.
  */
+//-----------------INCLUDES------------------------
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
 
 #include "perceptron.h"
 
+//------------------LEARNING_VALUES------------------------
+
+//Learning value.
 static float alpha = 0.1;
 
+//Learning examples
+static int samples = 10000;
+
+//-------------------IMPLEMENTATION-----------------------
+
+//Signal handling.
+volatile sig_atomic_t quit = 0;
+
+void sig_handler(int sig) {
+    quit = 1;
+}
 
 /**
  * Boolean values for input are -1 for false and +1 for true.
  */
 int main(int argc, char* argv[]) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sig_handler;
+    sigaction(SIGINT,&sa,NULL);
+
     srand((unsigned int) time(NULL));
 
-    if(argc != 1) {
+    if(argc < 1) {
         fprintf(stderr,"Invalid parameters given, exiting!\n");
         return EXIT_FAILURE;
     }
@@ -38,15 +62,17 @@ int main(int argc, char* argv[]) {
     int choose;
     int n = scanf("%d",&choose);
     if(n < 0) {
-        fprintf(stderr,"scanf failed\n");
-        return EXIT_FAILURE;
+        if(errno != EINTR) {
+            fprintf(stderr,"Aborted, shutting down\n");
+            return EXIT_SUCCESS;
+        } else {
+            fprintf(stderr,"Read failed\n");
+            return EXIT_FAILURE;
+        }
     } else if(choose < 0 || choose > 1) {
         fprintf(stdout,"Shutting down\n");
         return EXIT_SUCCESS;
     }
-
-    //Generating test data.
-    int samples = 10000;
 
     float input1[samples];
     float input2[samples];
@@ -101,12 +127,23 @@ int main(int argc, char* argv[]) {
     }
     fprintf(stdout,"Perceptron post-training: w1: %f, w2: %f\n",perceptron->weights[0],perceptron->weights[1]);
 
-
-    while(1) {
+    //----------VALIDATE_PERCEPTRON---------------------------
+    while(quit == 0) {
         fprintf(stdout,"Enter first input 0 and 1 and then the desired output.\n");
         float input[2];
         for(int j = 0; j < 2; j++) {
-            scanf("%f",&input[j]);
+            if(scanf("%f",&input[j]) < 0) {
+                if(errno != EINTR) {
+                    fprintf(stderr,"Error on read, shutting down.\n");
+                } 
+                quit = 1;
+                break;
+            }
+        }
+
+        //If error on scanf
+        if(quit == 1) {
+            break;
         }
        
         float result = feedForward(input,perceptron);
@@ -119,5 +156,10 @@ int main(int argc, char* argv[]) {
         fprintf(stdout,"After feed forward: %f\n",result); 
         fprintf(stdout,"So logical value is: %d\n",resultBoolean);
     }
+
+    fprintf(stdout,"\n-------------------------------------\n");
+    fprintf(stdout,"<<<<<<<<<<<Shutting down>>>>>>>>>>>>");
+    fprintf(stdout,"\n-------------------------------------\n");
+    free(perceptron);
 
 }
